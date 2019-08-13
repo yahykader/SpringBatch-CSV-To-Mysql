@@ -5,10 +5,12 @@ import javax.sql.DataSource;
 import org.Kader.batch.UserItemProcessor;
 import org.Kader.entities.User;
 import org.springframework.batch.core.Job;
+import org.springframework.batch.core.JobExecutionListener;
 import org.springframework.batch.core.Step;
 import org.springframework.batch.core.configuration.annotation.EnableBatchProcessing;
 import org.springframework.batch.core.configuration.annotation.JobBuilderFactory;
 import org.springframework.batch.core.configuration.annotation.StepBuilderFactory;
+import org.springframework.batch.core.configuration.annotation.StepScope;
 import org.springframework.batch.core.launch.support.RunIdIncrementer;
 import org.springframework.batch.item.database.BeanPropertyItemSqlParameterSourceProvider;
 import org.springframework.batch.item.database.JdbcBatchItemWriter;
@@ -18,13 +20,15 @@ import org.springframework.batch.item.file.mapping.BeanWrapperFieldSetMapper;
 import org.springframework.batch.item.file.mapping.DefaultLineMapper;
 import org.springframework.batch.item.file.transform.DelimitedLineTokenizer;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.io.ClassPathResource;
+import org.springframework.core.io.Resource;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.namedparam.SqlParameterSource;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
-
-import javassist.ClassClassPath;
 
 @Configuration
 @EnableBatchProcessing
@@ -38,31 +42,57 @@ public class SpringBatchConfig {
 	@Autowired
 	public DataSource dataSource;
 	
+	@Qualifier(value="importUserJob")
 	@Bean
-	public DataSource dataSource() {
-		final DriverManagerDataSource db=new DriverManagerDataSource();
-		db.setDriverClassName("com.mysql.jdbc.Driver");
-		db.setUrl("jdbc:mysql://localhost:3306/loadcsv");
-		db.setUsername("root");
-		db.setPassword("root");
-		return dataSource;
+	public Job importUserJob() throws Exception {
+		return jobBuilderFactory.get("importUserJob")
+				                .incrementer(new RunIdIncrementer())
+				               // .listener(listener())
+				                .start(step1())
+				                .build();
 	}
 	
-	public FlatFileItemReader<User> reader(){
+	@Bean
+	public Step step1() throws Exception{
+		return stepBuilderFactory.get("step1")
+								 .<User,User>chunk(5)
+								 .reader(reader())
+								 .processor(processor())
+								 .writer(writer())
+								 .build();
+		
+	}
+
+	@Bean
+	@StepScope
+	Resource inputFileRessource(@Value("#{jobParameters[fileName]}") final String fileName)  throws Exception{
+		return  new ClassPathResource(fileName);
+	}
+	
+
+	@Bean
+	@StepScope
+	public FlatFileItemReader<User> reader() throws Exception{
 		FlatFileItemReader<User> reader=new FlatFileItemReader<>();
-		reader.setResource(new ClassPathResource("users.csv"));
-		reader.setLinesToSkip(1);
-		reader.setLineMapper(lineMapper());
+		reader.setResource(inputFileRessource(null));
+		//reader.setLinesToSkip(1);
+		reader.setLineMapper(new DefaultLineMapper<User>() {{
+			setLineTokenizer(new DelimitedLineTokenizer() {{
+				setNames("id","firstName","lastName","email","age");
+				//setNames(new String[] {"id","first_name","last_name","email","age"});
+			}});
+			setFieldSetMapper(new UserFileRowMapper());
+		}});
 		return reader;
 	}
 
-	private LineMapper<User> lineMapper() {
+	/*private LineMapper<User> lineMapper() {
 		DefaultLineMapper<User> lineMapper=new DefaultLineMapper<>();
 		DelimitedLineTokenizer lineTokenizer =new DelimitedLineTokenizer();
 		
 		
 		lineTokenizer.setDelimiter(",");
-		lineTokenizer.setNames(new String[] {"id","name","dept","salary"});
+		lineTokenizer.setNames(new String[] {"name"});
 		lineTokenizer.setStrict(false);
 		
 		BeanWrapperFieldSetMapper<User> fieldSetMapper=new BeanWrapperFieldSetMapper<>();
@@ -73,7 +103,7 @@ public class SpringBatchConfig {
 		
 		return lineMapper;
 	}
-	
+	*/
 	@Bean
 	public UserItemProcessor processor() {
 		return new UserItemProcessor();
@@ -82,41 +112,20 @@ public class SpringBatchConfig {
 	@Bean
 	public JdbcBatchItemWriter<User> writer(){
 		JdbcBatchItemWriter<User> writer=new JdbcBatchItemWriter<>();
-		writer.setItemSqlParameterSourceProvider(new BeanPropertyItemSqlParameterSourceProvider<User>());
-		writer.setSql("INSERT INTO user (id,name,dept,salary) VALUES (:id,:name,:dept,:salary)");
 		writer.setDataSource(dataSource);
-		
+		writer.setSql("INSERT INTO user (id, first_name, last_name, email, age) VALUES (:id, :firstName, :lastName, :email, :age)");
+		writer.setItemSqlParameterSourceProvider(new BeanPropertyItemSqlParameterSourceProvider<User>());
 		return writer;	
 	}
 	
-	@Bean
-	public Step step1() {
-		return stepBuilderFactory.get("load-CSV")
-								 .<User,User>chunk(100)
-								 .reader(reader())
-								 .processor(processor())
-								 .writer(writer())
-								 .build();
-		
+	/*@Bean
+	public DataSource dataSource() {
+		final DriverManagerDataSource db=new DriverManagerDataSource();
+		db.setDriverClassName("com.mysql.cj.jdbc.Driver");
+		db.setUrl("jdbc:mysql://localhost/loadcsv");
+		db.setUsername("root");
+		db.setPassword("root");
+		return dataSource;
 	}
-	
-	@Bean
-	public Job job() {
-		return jobBuilderFactory.get("import User Job")
-				                .incrementer(new RunIdIncrementer())
-				                .flow(step1())
-				                .end()
-				                .build();
-	}
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-
+	*/
 }
