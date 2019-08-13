@@ -3,6 +3,7 @@ package org.Kader.config;
 import javax.sql.DataSource;
 
 import org.Kader.batch.UserItemProcessor;
+import org.Kader.batch.UserItemWriter;
 import org.Kader.entities.User;
 import org.springframework.batch.core.Job;
 import org.springframework.batch.core.JobExecutionListener;
@@ -59,8 +60,7 @@ public class SpringBatchConfig {
 								 .reader(reader())
 								 .processor(processor())
 								 .writer(writer())
-								 .build();
-		
+								 .build();	
 	}
 
 	@Bean
@@ -104,19 +104,25 @@ public class SpringBatchConfig {
 		return lineMapper;
 	}
 	*/
+	
 	@Bean
 	public UserItemProcessor processor() {
 		return new UserItemProcessor();
 	}
 	
 	@Bean
+	public UserItemWriter writer() {
+		return new UserItemWriter();
+	}
+	
+	/*@Bean
 	public JdbcBatchItemWriter<User> writer(){
 		JdbcBatchItemWriter<User> writer=new JdbcBatchItemWriter<>();
 		writer.setDataSource(dataSource);
 		writer.setSql("INSERT INTO user (id, first_name, last_name, email, age) VALUES (:id, :firstName, :lastName, :email, :age)");
 		writer.setItemSqlParameterSourceProvider(new BeanPropertyItemSqlParameterSourceProvider<User>());
 		return writer;	
-	}
+	}*/
 	
 	/*@Bean
 	public DataSource dataSource() {
